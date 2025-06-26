@@ -7,32 +7,81 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; position: relative; }
-    #controls { margin-bottom: 15px; }
-    #controls > * { margin-right: 10px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border: 1px solid #ccc; padding: 4px; text-align: left; }
-    th { background: #f4f4f4; }
-    #downloadButton { padding: 6px 12px; }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f7f9fc; color: #333; position: relative; }
+    h1 { margin-bottom: 10px; font-size: 1.5em; color: #2c3e50; }
+    /* 설명문: 우측 상단 고정, 높이 제한 */
+    #instructions {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 260px;
+      max-height: 180px;
+      overflow-y: auto;
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 10px;
+      font-size: 0.85em;
+      color: #555;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      border-radius: 4px;
+      line-height: 1.4;
+    }
+    #instructions strong { display: block; margin-bottom: 8px; }
+    #instructions ol { padding-left: 20px; margin: 0; }
+    #instructions li { margin-bottom: 4px; }
+    /* 컨트롤 */
+    #controls { margin-top: 80px; margin-bottom: 15px; }
+    #controls > * { margin-right: 10px; vertical-align: middle; }
+    #controls input[type="file"], #controls select, #controls input[type="text"], #controls button {
+      height: 36px; line-height: 36px; padding: 0 12px;
+      font-size: 1em; border-radius: 4px; background: #fff;
+      border: 1px solid #ccc; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+      vertical-align: middle;
+    }
+    #controls input[type="file"] { border: none; cursor: pointer; }
+    #controls input[type="file"]::-webkit-file-upload-button {
+      border: none; line-height: 36px; padding: 0 12px; font: inherit; cursor: pointer;
+    }
+    #controls select { width: 140px; }
+    #controls input[type="text"] { width: 200px; }
+    #controls button { background: #3498db; border-color: #2980b9; color: #fff; cursor: pointer; }
+    #controls button:disabled { background: #95a5a6; border-color: #7f8c8d; cursor: not-allowed; }
+    /* 테이블 */
+    #tableContainer { overflow-x: auto; margin-top: 10px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #ecf0f1; position: sticky; top: 0; z-index: 1; color: #2c3e50; }
+    tr:nth-child(even) { background: #fafafa; }
+    tr:hover { background: #e1f5fe; }
+    .col-add-name { white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
     /* 로딩 오버레이 */
     #loadingOverlay {
       display: none;
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
       background: rgba(0,0,0,0.5);
-      color: white;
-      font-size: 1.5em;
-      align-items: center;
-      justify-content: center;
+      color: #fff; font-size: 1.5em;
+      align-items: center; justify-content: center;
       z-index: 9999;
     }
   </style>
 </head>
 <body>
   <h1>스마트스토어 옵션 분리 도구</h1>
+
+  <div id="instructions">
+    <strong>사용 방법</strong>
+    <ol>
+      <li>네이버 스마트 스토어센터 로그인 → 상품 조회/수정</li>
+      <li>판매상태 : 판매중, 품절 선택 │ 기간 : 전체 선택</li>
+      <li>검색 클릭</li>
+      <li>상품목록 오른쪽 100개씩 → 1000개씩 선택</li>
+      <li>엑셀 일괄작업 → 수정양식 다운로드 선택</li>
+      <li>스토어 이름으로 파일 저장후 웹페이지에서 파일 첨부후 '품절보기'선택</li>
+    </ol>
+  </div>
+
   <div id="controls">
     <input type="file" id="fileInput" accept=".xlsx,.xls" />
     <select id="filter">
@@ -43,15 +92,15 @@
     <input type="text" id="search" placeholder="검색어 입력" />
     <button id="downloadButton" disabled>엑셀 다운로드</button>
   </div>
+
   <div id="tableContainer"></div>
-  <div id="loadingOverlay">변환중입니다...</div>
+  <div id="loadingOverlay">변환중입니다... * 파일 크기가 클수록 잠시 화면이 멈춰있을 수 있습니다 기다려주세요 *</div>
 
   <script>
     let originalData = [], transformedData = [];
     let metaRow1 = [], metaRow3 = [];
-    let axis1Name = '', axis2Name = '';
-    let headersOrder = [];
-
+    let axisNames = [], headersOrder = [];
+    let originalFileName = '';
     const fileInput = document.getElementById('fileInput');
     const filterSelect = document.getElementById('filter');
     const searchInput = document.getElementById('search');
@@ -69,31 +118,23 @@
     function handleFile(event) {
       const file = event.target.files[0];
       if (!file) return;
-      showLoading();
-      downloadBtn.disabled = true;
+      originalFileName = file.name.replace(/\.[^/.]+$/, '');
+      showLoading(); downloadBtn.disabled = true;
       const reader = new FileReader();
       reader.onload = function(e) {
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const fullRows = XLSX.utils.sheet_to_json(sheet, { header:1, defval: '' });
-        metaRow1 = fullRows[0] || [];
-        metaRow3 = fullRows[2] || [];
+        const wb = XLSX.read(data, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        metaRow1 = rows[0] || [];
+        metaRow3 = rows[2] || [];
         originalData = XLSX.utils.sheet_to_json(sheet, { defval: '', range: 1 });
         if (originalData.length) originalData.shift();
-        const optNameCell = originalData[0]?.['옵션명'] || '';
-        const axisNames = optNameCell.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-        axis1Name = axisNames[0] || '옵션1';
-        axis2Name = axisNames[1] || '옵션2';
-        headersOrder = [
-          '상품번호','판매자 상품코드','상품명',
-          axis1Name,axis2Name,'옵션 재고수량',
-          '추가상품명','추가상품값','추가상품 재고수량'
-        ];
-        transformData();
-        applyFilters();
-        downloadBtn.disabled = false;
-        hideLoading();
+        const optCell = originalData[0]?.['옵션명'] || '';
+        axisNames = optCell.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+        if (axisNames.length < 2) axisNames = ['옵션1', '옵션2'];
+        headersOrder = ['상품번호','판매자 상품코드','상품명',...axisNames,'옵션 재고수량','추가상품명','추가상품값','추가상품 재고수량'];
+        transformData(); applyFilters(); downloadBtn.disabled = false; hideLoading();
       };
       reader.readAsArrayBuffer(file);
     }
@@ -101,38 +142,24 @@
     function transformData() {
       transformedData = [];
       originalData.forEach(row => {
-        const base = {
-          '상품번호': row['상품번호'] || '',
-          '판매자 상품코드': row['판매자 상품코드'] || '',
-          '상품명': row['상품명'] || '',
-          '추가상품명': row['추가상품명'] || ''
-        };
+        const base = {'상품번호':row['상품번호']||'','판매자 상품코드':row['판매자 상품코드']||'','상품명':row['상품명']||''};
         const vals = (row['옵션값']||'').split(/\r?\n/);
         const stocks = (row['옵션 재고수량']||'').split(/\r?\n/);
-        const maxLen = Math.max(vals.length, stocks.length);
-        for (let i = 0; i < maxLen; i++) {
-          const parts = (vals[i]||'').split(',');
-          transformedData.push({
-            ...base,
-            [axis1Name]: parts[0]?.trim() || '',
-            [axis2Name]: parts[1]?.trim() || '',
-            '옵션 재고수량': stocks[i]?.trim() || '',
-            '추가상품값': '',
-            '추가상품 재고수량': ''
-          });
+        const len = Math.max(vals.length, stocks.length);
+        for (let i = 0; i < len; i++) {
+          const parts = (vals[i] || '').split(',').map(v => v.trim());
+          const entry = {...base, '옵션 재고수량': stocks[i]?.trim() || ''};
+          axisNames.forEach((n, idx) => entry[n] = parts[idx] || '');
+          entry['추가상품명']=''; entry['추가상품값']=''; entry['추가상품 재고수량']='';
+          transformedData.push(entry);
         }
-        const aVals = (row['추가상품값']||'').split(',');
-        const aStocks = (row['추가상품 재고수량']||'').split(',');
-        const maxAdd = Math.max(aVals.length, aStocks.length);
-        for (let i = 0; i < maxAdd; i++) {
-          transformedData.push({
-            ...base,
-            [axis1Name]: '',
-            [axis2Name]: '',
-            '옵션 재고수량': '',
-            '추가상품값': aVals[i]?.trim() || '',
-            '추가상품 재고수량': aStocks[i]?.trim() || ''
-          });
+        const aVals = (row['추가상품값']||'').split(',').map(v=>v.trim());
+        const aStocks = (row['추가상품 재고수량']||'').split(',').map(v=>v.trim());
+        const alen = Math.max(aVals.length, aStocks.length);
+        for (let i=0; i<alen; i++) {
+          const entry={...base,'옵션 재고수량':''}; axisNames.forEach(n=>entry[n]='');
+          entry['추가상품명']=row['추가상품명']||''; entry['추가상품값']=aVals[i]||''; entry['추가상품 재고수량']=aStocks[i]||'';
+          transformedData.push(entry);
         }
       });
     }
@@ -141,43 +168,39 @@
       const mode = filterSelect.value;
       const term = searchInput.value.trim().toLowerCase();
       const filtered = transformedData.filter(r => {
-        if (!r[axis1Name] && !r[axis2Name] && !r['추가상품값']) return false;
-        const stock = r[axis1Name]||r[axis2Name] ? Number(r['옵션 재고수량']||0) : Number(r['추가상품 재고수량']||0);
-        if (mode === 'inStock' && stock <= 0) return false;
-        if (mode === 'soldOut' && stock !== 0) return false;
-        if (term) {
-          return headersOrder.some(h => r[h]?.toString().toLowerCase().includes(term));
-        }
-        return true;
+        const hasOpt = axisNames.some(n => r[n]);
+        if (!hasOpt && !r['추가상품값']) return false;
+        const stock = hasOpt ? Number(r['옵션 재고수량']||0) : Number(r['추가상품 재고수량']||0);
+        if (mode==='inStock'&&stock<=0) return false;
+        if (mode==='soldOut'&&stock!==0) return false;
+        return term ? headersOrder.some(h => r[h]?.toString().toLowerCase().includes(term)) : true;
       });
       renderTable(filtered);
     }
 
     function renderTable(data) {
       const container = document.getElementById('tableContainer');
-      if (!data.length) { container.innerHTML = '<p>데이터가 없습니다.</p>'; return; }
-      let html = '<table><thead><tr>' + headersOrder.map(h=>`<th>${h}</th>`).join('') + '</tr></thead><tbody>';
-      html += data.map(r => '<tr>' + headersOrder.map(h=>`<td>${r[h]||''}</td>`).join('') + '</tr>').join('');
+      if (!data.length) { container.innerHTML='<p>데이터가 없습니다.</p>'; return; }
+      let html = '<table><thead><tr>'+headersOrder.map(h=>`<th${h==='추가상품명'? ' class="col-add-name"':''}>${h}</th>`).join('')+'</tr></thead><tbody>';
+      html += data.map(r=>'<tr>'+headersOrder.map(h=>`<td${h==='추가상품명'? ' class="col-add-name"':''}>${r[h]||''}</td>`).join('')+'</tr>').join('');
       html += '</tbody></table>';
       container.innerHTML = html;
     }
 
     function downloadExcel() {
       showLoading();
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet([]);
-      if (metaRow1.length) XLSX.utils.sheet_add_aoa(ws, [metaRow1], { origin: 'A1' });
-      XLSX.utils.sheet_add_aoa(ws, [headersOrder], { origin: 'A2' });
-      if (metaRow3.length) XLSX.utils.sheet_add_aoa(ws, [metaRow3], { origin: 'A3' });
-      const jsonData = transformedData.map(r => {
-        const obj = {};
-        headersOrder.forEach(h => obj[h] = r[h] || '');
-        return obj;
-      });
-      XLSX.utils.sheet_add_json(ws, jsonData, { skipHeader: true, origin: 'A4' });
-      XLSX.utils.book_append_sheet(wb, ws, '분리된옵션');
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      saveAs(new Blob([wbout], { type: 'application/octet-stream' }), '분리된옵션.xlsx');
+      const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet([]);
+      const jsonData = transformedData.map(r=>{const o={};headersOrder.forEach(h=>o[h]=r[h]||'');return o;});
+      const activeHeaders = headersOrder.filter(h=>jsonData.some(r=>r[h]));
+      if (metaRow1.length) XLSX.utils.sheet_add_aoa(ws,[metaRow1],{origin:'A1'});
+      XLSX.utils.sheet_add_aoa(ws,[activeHeaders],{origin:'A2'});
+      if (metaRow3.length) XLSX.utils.sheet_add_aoa(ws,[metaRow3],{origin:'A3'});
+      XLSX.utils.sheet_add_json(ws,jsonData.map(r=>{const row={};activeHeaders.forEach(h=>row[h]=r[h]||'');return row;}),{skipHeader:true,origin:'A4'});
+      ws['!cols']=activeHeaders.map(h=>({wch:Math.max(h.length,...jsonData.map(r=>(r[h]||'').toString().length))+2}));
+      const suffixMap={all:'전체보기',inStock:'재고있음',soldOut:'품절보기'};const suffix=suffixMap[filterSelect.value]||'';
+      const fileName=`${originalFileName}${suffix?'-'+suffix:''}.xlsx`;
+      XLSX.utils.book_append_sheet(wb,ws,'분리된옵션');const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+      saveAs(new Blob([wbout],{type:'application/octet-stream'}),fileName);
       hideLoading();
     }
   </script>
