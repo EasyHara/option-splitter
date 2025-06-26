@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>스마트스토어 옵션 분리 도구</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; position: relative; }
+    #controls { margin-bottom: 15px; }
+    #controls > * { margin-right: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 4px; text-align: left; }
+    th { background: #f4f4f4; }
+    #downloadButton { padding: 6px 12px; }
+    /* 로딩 오버레이 */
+    #loadingOverlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.5);
+      color: white;
+      font-size: 1.5em;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+  <h1>스마트스토어 옵션 분리 도구</h1>
+  <div id="controls">
+    <input type="file" id="fileInput" accept=".xlsx,.xls" />
+    <select id="filter">
+      <option value="all">전체보기</option>
+      <option value="inStock">재고있음</option>
+      <option value="soldOut">품절보기</option>
+    </select>
+    <input type="text" id="search" placeholder="검색어 입력" />
+    <button id="downloadButton" disabled>엑셀 다운로드</button>
+  </div>
+  <div id="tableContainer"></div>
+  <div id="loadingOverlay">변환중입니다...</div>
+
+  <script>
+    let originalData = [], transformedData = [];
+    let metaRow1 = [], metaRow3 = [];
+    let axis1Name = '', axis2Name = '';
+    let headersOrder = [];
+
+    const fileInput = document.getElementById('fileInput');
+    const filterSelect = document.getElementById('filter');
+    const searchInput = document.getElementById('search');
+    const downloadBtn = document.getElementById('downloadButton');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+
+    fileInput.addEventListener('change', handleFile);
+    filterSelect.addEventListener('change', applyFilters);
+    searchInput.addEventListener('input', applyFilters);
+    downloadBtn.addEventListener('click', downloadExcel);
+
+    function showLoading() { loadingOverlay.style.display = 'flex'; }
+    function hideLoading() { loadingOverlay.style.display = 'none'; }
+
+    function handleFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      showLoading();
+      downloadBtn.disabled = true;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const fullRows = XLSX.utils.sheet_to_json(sheet, { header:1, defval: '' });
+        metaRow1 = fullRows[0] || [];
+        metaRow3 = fullRows[2] || [];
+        originalData = XLSX.utils.sheet_to_json(sheet, { defval: '', range: 1 });
+        if (originalData.length) originalData.shift();
+        const optNameCell = originalData[0]?.['옵션명'] || '';
+        const axisNames = optNameCell.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+        axis1Name = axisNames[0] || '옵션1';
+        axis2Name = axisNames[1] || '옵션2';
+        headersOrder = [
+          '상품번호','판매자 상품코드','상품명',
+          axis1Name,axis2Name,'옵션 재고수량',
+          '추가상품명','추가상품값','추가상품 재고수량'
+        ];
+        transformData();
+        applyFilters();
+        downloadBtn.disabled = false;
+        hideLoading();
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function transformData() {
+      transformedData = [];
+      originalData.forEach(row => {
+        const base = {
+          '상품번호': row['상품번호'] || '',
+          '판매자 상품코드': row['판매자 상품코드'] || '',
+          '상품명': row['상품명'] || '',
+          '추가상품명': row['추가상품명'] || ''
+        };
+        const vals = (row['옵션값']||'').split(/\r?\n/);
+        const stocks = (row['옵션 재고수량']||'').split(/\r?\n/);
+        const maxLen = Math.max(vals.length, stocks.length);
+        for (let i = 0; i < maxLen; i++) {
+          const parts = (vals[i]||'').split(',');
+          transformedData.push({
+            ...base,
+            [axis1Name]: parts[0]?.trim() || '',
+            [axis2Name]: parts[1]?.trim() || '',
+            '옵션 재고수량': stocks[i]?.trim() || '',
+            '추가상품값': '',
+            '추가상품 재고수량': ''
+          });
+        }
+        const aVals = (row['추가상품값']||'').split(',');
+        const aStocks = (row['추가상품 재고수량']||'').split(',');
+        const maxAdd = Math.max(aVals.length, aStocks.length);
+        for (let i = 0; i < maxAdd; i++) {
+          transformedData.push({
+            ...base,
+            [axis1Name]: '',
+            [axis2Name]: '',
+            '옵션 재고수량': '',
+            '추가상품값': aVals[i]?.trim() || '',
+            '추가상품 재고수량': aStocks[i]?.trim() || ''
+          });
+        }
+      });
+    }
+
+    function applyFilters() {
+      const mode = filterSelect.value;
+      const term = searchInput.value.trim().toLowerCase();
+      const filtered = transformedData.filter(r => {
+        if (!r[axis1Name] && !r[axis2Name] && !r['추가상품값']) return false;
+        const stock = r[axis1Name]||r[axis2Name] ? Number(r['옵션 재고수량']||0) : Number(r['추가상품 재고수량']||0);
+        if (mode === 'inStock' && stock <= 0) return false;
+        if (mode === 'soldOut' && stock !== 0) return false;
+        if (term) {
+          return headersOrder.some(h => r[h]?.toString().toLowerCase().includes(term));
+        }
+        return true;
+      });
+      renderTable(filtered);
+    }
+
+    function renderTable(data) {
+      const container = document.getElementById('tableContainer');
+      if (!data.length) { container.innerHTML = '<p>데이터가 없습니다.</p>'; return; }
+      let html = '<table><thead><tr>' + headersOrder.map(h=>`<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+      html += data.map(r => '<tr>' + headersOrder.map(h=>`<td>${r[h]||''}</td>`).join('') + '</tr>').join('');
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    function downloadExcel() {
+      showLoading();
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([]);
+      if (metaRow1.length) XLSX.utils.sheet_add_aoa(ws, [metaRow1], { origin: 'A1' });
+      XLSX.utils.sheet_add_aoa(ws, [headersOrder], { origin: 'A2' });
+      if (metaRow3.length) XLSX.utils.sheet_add_aoa(ws, [metaRow3], { origin: 'A3' });
+      const jsonData = transformedData.map(r => {
+        const obj = {};
+        headersOrder.forEach(h => obj[h] = r[h] || '');
+        return obj;
+      });
+      XLSX.utils.sheet_add_json(ws, jsonData, { skipHeader: true, origin: 'A4' });
+      XLSX.utils.book_append_sheet(wb, ws, '분리된옵션');
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      saveAs(new Blob([wbout], { type: 'application/octet-stream' }), '분리된옵션.xlsx');
+      hideLoading();
+    }
+  </script>
+</body>
+</html>
