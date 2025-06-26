@@ -39,9 +39,7 @@
       vertical-align: middle;
     }
     #controls input[type="file"] { border: none; cursor: pointer; }
-    #controls input[type="file"]::-webkit-file-upload-button {
-      border: none; line-height: 36px; padding: 0 12px; font: inherit; cursor: pointer;
-    }
+    #controls input[type="file"]::-webkit-file-upload-button { border: none; line-height: 36px; padding: 0 12px; font: inherit; cursor: pointer; }
     #controls select { width: 140px; }
     #controls input[type="text"] { width: 200px; }
     #controls button { background: #3498db; border-color: #2980b9; color: #fff; cursor: pointer; }
@@ -56,14 +54,10 @@
     .col-add-name { white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
     /* 로딩 오버레이 */
     #loadingOverlay {
-      display: none;
-      position: fixed;
-      top: 0; left: 0;
+      display: none; position: fixed; top: 0; left: 0;
       width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.5);
-      color: #fff; font-size: 1.5em;
-      align-items: center; justify-content: center;
-      z-index: 9999;
+      background: rgba(0,0,0,0.5); color: #fff; font-size: 1.5em;
+      align-items: center; justify-content: center; z-index: 9999;
     }
   </style>
 </head>
@@ -84,6 +78,7 @@
 
   <div id="controls">
     <input type="file" id="fileInput" accept=".xlsx,.xls" />
+    <button id="resetButton">초기화</button>
     <select id="filter">
       <option value="all">전체보기</option>
       <option value="inStock">재고있음</option>
@@ -102,10 +97,23 @@
     let axisNames = [], headersOrder = [];
     let originalFileName = '';
     const fileInput = document.getElementById('fileInput');
+    const resetButton = document.getElementById('resetButton');
     const filterSelect = document.getElementById('filter');
     const searchInput = document.getElementById('search');
     const downloadBtn = document.getElementById('downloadButton');
     const loadingOverlay = document.getElementById('loadingOverlay');
+
+    resetButton.addEventListener('click', () => {
+      // 초기화 로직
+      fileInput.value = '';
+      filterSelect.value = 'all';
+      searchInput.value = '';
+      originalData = [];
+      transformedData = [];
+      headersOrder = [];
+      document.getElementById('tableContainer').innerHTML = '';
+      downloadBtn.disabled = true;
+    });
 
     fileInput.addEventListener('change', handleFile);
     filterSelect.addEventListener('change', applyFilters);
@@ -116,8 +124,7 @@
     function hideLoading() { loadingOverlay.style.display = 'none'; }
 
     function handleFile(event) {
-      const file = event.target.files[0];
-      if (!file) return;
+      const file = event.target.files[0]; if (!file) return;
       originalFileName = file.name.replace(/\.[^/.]+$/, '');
       showLoading(); downloadBtn.disabled = true;
       const reader = new FileReader();
