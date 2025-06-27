@@ -7,35 +7,114 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background: #f7f9fc; color: #333; position: relative; }
-    h1 { margin-bottom: 10px; font-size: 1.5em; color: #2c3e50; }
-    #instructions {
-      position: absolute; top: 20px; right: 20px; width: 260px; max-height: 180px;
-      overflow-y: auto; background: #fff; border: 1px solid #ddd; padding: 10px;
-      font-size: 0.85em; color: #555; box-shadow: 0 2px 6px rgba(0,0,0,0.1); border-radius: 4px; line-height: 1.4;
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f7f9fc;
+      color: #333;
+      position: relative;
     }
-    #controls { margin-top: 80px; margin-bottom: 15px; }
-    #controls > * { margin-right: 10px; vertical-align: middle; }
-    input[type="file"], select, input[type="text"], button {
-      height: 36px; padding: 0 12px; font-size: 1em; border-radius: 4px;
-      border: 1px solid #ccc; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+    h1 {
+      margin-bottom: 10px;
+      font-size: 1.5em;
+      color: #2c3e50;
+    }
+    #instructions {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 260px;
+      max-height: 180px;
+      overflow-y: auto;
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 10px;
+      font-size: 0.85em;
+      color: #555;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      border-radius: 4px;
+      line-height: 1.4;
+    }
+    #controls {
+      margin-top: 80px;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    input[type="file"],
+    select,
+    input[type="text"],
+    button {
+      height: 36px;
+      padding: 0 12px;
+      font-size: 1em;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
     }
     input[type="file"]::-webkit-file-upload-button {
-      border: none; padding: 0 12px; font: inherit; cursor: pointer;
+      border: none;
+      padding: 0 12px;
+      font: inherit;
+      cursor: pointer;
     }
-    button { background: #3498db; border-color: #2980b9; color: #fff; cursor: pointer; }
-    button:disabled { background: #95a5a6; cursor: not-allowed; }
-    #tableContainer { overflow-x: auto; margin-top: 10px; }
-    table { width: 100%; border-collapse: collapse; background: #fff; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background: #ecf0f1; position: sticky; top: 0; color: #2c3e50; }
-    tr:nth-child(even) { background: #fafafa; }
-    tr:hover { background: #e1f5fe; }
-    .col-add-name { white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
+    button {
+      background: #3498db;
+      border-color: #2980b9;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:disabled {
+      background: #95a5a6;
+      cursor: not-allowed;
+    }
+    #tableContainer {
+      overflow-x: auto;
+      margin-top: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background: #ecf0f1;
+      position: sticky;
+      top: 0;
+      color: #2c3e50;
+    }
+    tr:nth-child(even) {
+      background: #fafafa;
+    }
+    tr:hover {
+      background: #e1f5fe;
+    }
+    .col-add-name {
+      white-space: nowrap;
+      max-width: 80px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     #loadingOverlay {
-      display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.5); color: #fff; font-size: 1.5em;
-      align-items: center; justify-content: center; z-index: 9999;
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.5);
+      color: #fff;
+      font-size: 1.5em;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
     }
   </style>
 </head>
@@ -72,10 +151,10 @@
 
   <script>
     let originalData = [], transformedData = [];
-    let metaRow1 = [], metaRow3 = [];
     let axisNames = ['옵션1', '옵션2', '옵션3'];
     let headersOrder = [];
     let originalFileName = '';
+
     const fileInput = document.getElementById('fileInput');
     const resetButton = document.getElementById('resetButton');
     const filterSelect = document.getElementById('filter');
@@ -107,6 +186,7 @@
       if (!file) return;
       originalFileName = file.name.replace(/\.[^/.]+$/, '');
       showLoading(); downloadBtn.disabled = true;
+
       const reader = new FileReader();
       reader.onload = function(e) {
         const data = new Uint8Array(e.target.result);
@@ -114,10 +194,7 @@
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
         const headers = rows[1] || [];
-        metaRow1 = headers;
-        metaRow3 = rows[3] || [];
 
-        // ✅ 3행부터 데이터 시작
         originalData = XLSX.utils.sheet_to_json(sheet, {
           defval: '',
           header: headers,
@@ -125,39 +202,61 @@
         });
 
         headersOrder = ['상품번호', '판매자 상품코드', '상품명', ...axisNames, '옵션 재고수량', '추가상품명', '추가상품값', '추가상품 재고수량'];
-        transformData(); applyFilters(); downloadBtn.disabled = false; hideLoading();
+        transformData();
+        applyFilters();
+        downloadBtn.disabled = false;
+        hideLoading();
       };
       reader.readAsArrayBuffer(file);
     }
 
     function transformData() {
       transformedData = [];
+
       originalData.forEach(row => {
         const base = {
           '상품번호': row['상품번호'] || '',
           '판매자 상품코드': row['판매자 상품코드'] || '',
           '상품명': row['상품명'] || ''
         };
+
+        // 옵션값 처리
         const vals = (row['옵션값'] || '').split(/\r?\n/);
         const stocks = (row['옵션 재고수량'] || '').split(/\r?\n/);
         const len = Math.max(vals.length, stocks.length);
+
         for (let i = 0; i < len; i++) {
           const parts = (vals[i] || '').split(',').map(v => v.trim());
           const entry = { ...base, '옵션 재고수량': stocks[i]?.trim() || '' };
           axisNames.forEach((n, idx) => entry[n] = parts[idx] || '');
-          entry['추가상품명'] = ''; entry['추가상품값'] = ''; entry['추가상품 재고수량'] = '';
+          entry['추가상품명'] = '';
+          entry['추가상품값'] = '';
+          entry['추가상품 재고수량'] = '';
           transformedData.push(entry);
         }
-        const aVals = (row['추가상품값'] || '').split(',').map(v => v.trim());
-        const aStocks = (row['추가상품 재고수량'] || '').split(',').map(v => v.trim());
-        const alen = Math.max(aVals.length, aStocks.length);
-        for (let i = 0; i < alen; i++) {
-          const entry = { ...base, '옵션 재고수량': '' };
-          axisNames.forEach(n => entry[n] = '');
-          entry['추가상품명'] = row['추가상품명'] || '';
-          entry['추가상품값'] = aVals[i] || '';
-          entry['추가상품 재고수량'] = aStocks[i] || '';
-          transformedData.push(entry);
+
+        // ✅ 추가옵션명은 줄바꿈, 값/재고는 쉼표로 구분
+        const addNames = (row['추가상품명'] || '').split(/\r?\n/).map(v => v.trim()).filter(Boolean);
+        const addValueGroups = (row['추가상품값'] || '').split(/\r?\n/);
+        const addStockGroups = (row['추가상품 재고수량'] || '').split(/\r?\n/);
+
+        const groupCount = Math.max(addNames.length, addValueGroups.length, addStockGroups.length);
+
+        for (let i = 0; i < groupCount; i++) {
+          const name = addNames[i] || '';
+          const values = (addValueGroups[i] || '').split(',').map(v => v.trim());
+          const stocks = (addStockGroups[i] || '').split(',').map(v => v.trim());
+
+          const itemCount = Math.max(values.length, stocks.length);
+          for (let j = 0; j < itemCount; j++) {
+            const entry = { ...base };
+            axisNames.forEach(n => entry[n] = '');
+            entry['옵션 재고수량'] = '';
+            entry['추가상품명'] = name;
+            entry['추가상품값'] = values[j] || '';
+            entry['추가상품 재고수량'] = stocks[j] || '';
+            transformedData.push(entry);
+          }
         }
       });
     }
@@ -170,12 +269,15 @@
     function getFilteredData() {
       const mode = filterSelect.value;
       const term = searchInput.value.trim().toLowerCase();
+
       return transformedData.filter(r => {
         const hasOpt = axisNames.some(n => r[n]);
         if (!hasOpt && !r['추가상품값']) return false;
+
         const stock = hasOpt ? Number(r['옵션 재고수량'] || 0) : Number(r['추가상품 재고수량'] || 0);
         if (mode === 'inStock' && stock <= 0) return false;
         if (mode === 'soldOut' && stock !== 0) return false;
+
         return term ? headersOrder.some(h => r[h]?.toString().toLowerCase().includes(term)) : true;
       });
     }
@@ -186,6 +288,7 @@
         container.innerHTML = '<p>데이터가 없습니다.</p>';
         return;
       }
+
       let html = '<table><thead><tr>' + headersOrder.map(h =>
         `<th${h === '추가상품명' ? ' class="col-add-name"' : ''}>${h}</th>`).join('') + '</tr></thead><tbody>';
       html += data.map(r => '<tr>' + headersOrder.map(h =>
